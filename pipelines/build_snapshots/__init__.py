@@ -1,0 +1,1 @@
+"""Build snapshots pipeline stage."""

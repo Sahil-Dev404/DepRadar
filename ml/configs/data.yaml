@@ -1,0 +1,18 @@
+bigquery:
+  project_env: GCP_PROJECT_ID          # name of the env var holding the project id
+  max_bytes_billed_env: BQ_MAX_BYTES_BILLED
+  default_max_bytes_billed: 60000000000   # 60 GB default cap per query
+  forbidden_tables: [Dependencies, DependencyGraphEdges, Dependents]
+grid:
+  first_target_month: "2023-01"
+  last_target_month: "2026-04"
+  horizon_months: 6
+universe:
+  top_n: 30000
+paths:
+  snapshots: data/raw/deps_dev/snapshots.parquet
+  grid_out: data/interim/snapshot_grid.parquet
+  raw_readme: data/raw/README.md
+  dependents: data/raw/deps_dev/dependents_by_T.parquet
+  universe_candidates: data/interim/universe_candidates.parquet
+  universe_by_T: data/interim/universe_by_T.parquet

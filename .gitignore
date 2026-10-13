@@ -1,0 +1,12 @@
+.pytest_cache/
+pipelines/__pycache__/
+data/raw/
+data/interim/
+data/processed/
+
+
+#additinal
+ml/artifacts/
+.venv/
+frontend/node_modules/
+frontend/dist/

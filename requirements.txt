@@ -1,0 +1,45 @@
+# ==============================================================================
+# DepRadar - Core Project Dependencies
+# Target Python Version: 3.11+
+# ==============================================================================
+
+# --- BigQuery & Data Pipeline ---
+google-cloud-bigquery>=3.25.0
+google-cloud-bigquery-storage>=2.26.0
+db-dtypes>=1.2.0
+pyarrow>=14.0.0
+pandas>=2.2.0
+pyyaml>=6.0.1
+requests>=2.31.0
+
+# --- Graph Analysis, ML & Feature Engineering ---
+numpy>=1.26.0
+scipy>=1.12.0
+networkx>=3.2.0
+matplotlib>=3.8.0
+seaborn>=0.13.0
+scikit-learn>=1.4.0
+lightgbm>=4.3.0
+
+# --- Notebooks & Prototyping ---
+jupyter>=1.0.0
+ipykernel>=6.29.0
+nbconvert>=7.14.0
+nbformat>=5.10.0
+
+# --- Backend API, DB & Lockfile Parsing ---
+fastapi>=0.110.0
+uvicorn[standard]>=0.28.0
+pydantic>=2.6.0
+semantic-version>=2.10.0
+sqlalchemy>=2.0.28
+alembic>=1.13.1
+asyncpg>=0.29.0
+psycopg2-binary>=2.9.9
+httpx>=0.27.0
+python-multipart>=0.0.9
+
+# --- Testing & Code Quality ---
+pytest>=8.1.0
+pytest-asyncio>=0.23.0
+ruff>=0.3.0
