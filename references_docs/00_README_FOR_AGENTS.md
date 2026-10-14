@@ -81,6 +81,20 @@ Notebooks explore; **reusable code lives in `ml/` and `pipelines/`** and is impo
 | Embargo | Gap of one horizon between train / validation / test `T` ranges |
 | OSV | Open Source Vulnerabilities database (advisories). deps.dev = Google's dependency/package metadata dataset on BigQuery |
 
-## 7. How the human works
+## 7. How the human works & Project Level Guidelines
 
-The human generates code with an agent, then retypes it into VS Code. Therefore: keep files detailed and focused,avoid uneccesary codes addition, avoid clever metaprogramming, prefer explicit readable code, and put a short docstring at the top of every file saying what it does and which doc section it implements.
+This project is a **High-Impact Technical Portfolio Project** designed to showcase applied software engineering, graph data science, and applied machine learning skills for job and internship applications.
+
+### Guidelines for All Code & Notebook Generations:
+1. **Target Complexity**: Professional Portfolio Grade — demonstrating strong fundamentals, rigorous methodology, clean code design, and clear problem-solving, **without enterprise over-engineering** (avoid unnecessary microservice boilerplate, defensive try-except mazes, custom multi-threaded logging frameworks, or heavy abstractions).
+2. **Professional Tone (No Classroom/Viva Jargon)**:
+   - Strictly **avoid** academic/classroom terms like "viva", "oral defense", "notes for examiners", "student capstone defense", or "homework".
+   - Use professional software engineering terminology: **"Key Engineering Takeaways"**, **"Technical Insights & Trade-offs"**, **"Production Considerations"**, **"Performance Scorecard"**.
+3. **Notebook Specifications**:
+   - **Cell Count**: 20–25 cells per notebook (approx. 12–15 code cells, 8–10 markdown cells).
+   - **Code Length**: ~250–320 lines of clean, readable, high-signal Python code.
+   - **Helpful Comments**: Clear, concise comments explaining the engineering rationale and mathematical intuition behind steps.
+   - **Visualizations**: 3–5 professional `matplotlib`/`seaborn` figures with clear labels, titles, and legends to effectively tell the technical story in a portfolio.
+4. **Coding Style**:
+   - Clean, readable, idiomatic Python (`pandas`, `numpy`, `networkx`, `scikit-learn`, `lightgbm`).
+   - Self-contained, modular, and easy to walk through during a technical interview.
