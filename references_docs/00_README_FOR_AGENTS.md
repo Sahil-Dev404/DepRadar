@@ -30,7 +30,7 @@ depradar/
   ml/            Reusable ML code: features/, models/{baselines,gnn}/, eval/, configs/, artifacts/ (git-ignored)
   pipelines/     Offline scripts: bigquery_export/, osv_ingest/, build_snapshots/, load_to_db/
   data/          raw/ interim/ processed/ sample_lockfiles/  (git-ignored except sample_lockfiles)
-  refernce_docs/          these documents
+  references_docs/       specification and architecture truth documents
 ```
 Notebooks explore; **reusable code lives in `ml/` and `pipelines/`** and is imported by notebooks. Do not put logic only in notebooks.
 

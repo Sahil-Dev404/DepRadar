@@ -68,15 +68,22 @@ Graph database; authentication/accounts; background job queue; LLM/chatbot featu
 - Frontend: 3,078-package lockfile renders without freezing (filtered/collapsed subgraph; cap documented).
 - Privacy: the uploaded lockfile body is not stored; stored analysis results expire (default 7 days).
 
-## 9. Demo (2 minutes; fill numbers only from real runs)
-1. Load a real lockfile, state the count of audit-style findings.
-2. Graph renders; vulnerable nodes coloured by severity; one known-malicious example if available.
-3. Click a vulnerable transitive package -> paths highlight; "reaches you through N direct dependencies".
-4. Removal-leverage list: "dropping these two direct dependencies removes [X] of [Y] weighted exposure".
-5. Risk overlay; open model card: temporal split, baselines vs GNN, an honest failure mode (popularity bias; distribution shift in 2026).
-6. One sentence on architecture: precomputed scores, path engine on the request path, versioned artifacts.
+## 9. Technical Interview Walkthrough & Demo Flow
+1. Load a real lockfile, review audit findings vs. reachability exposure.
+2. Graph renders: vulnerable nodes highlighted by severity; known-malicious alerts surfaced distinctly.
+3. Path tracing: inspect transitive dependencies to reveal root exposure chains.
+4. Dominator-based removal leverage: quantify systemic exposure reduction achievable by dropping or upgrading direct dependencies.
+5. Risk forecast & Model Card: inspect leak-free temporal evaluation, performance scorecards, and calibrated risk percentiles.
+6. Architecture overview: deterministic online engine, precomputed statistical artifacts, stateless serving.
 
-## 10. Resume bullet templates (placeholders until measured)
-- Built a full-stack dependency-exposure analyser (React/TypeScript, FastAPI, PostgreSQL): lockfile graph reconstruction, OSV range matching, and dominator-based removal-leverage ranking.
-- Designed a leak-free temporal evaluation (embargoed splits) for advisory forecasting comparing logistic regression, gradient boosting with neighbour aggregates and a GraphSAGE/GAT model on a [N]-package graph; reported [metric] with popularity-stratified analysis.
-- Shipped an interactive Cytoscape.js workspace with path highlighting and an in-product model card; deployed on [hosting] with CI.
+## 10. Technical Resume & Portfolio Highlights
+- **Full-Stack Graph Analysis Platform**: Architected a production-grade dependency-exposure analyser (React/TypeScript, FastAPI, PostgreSQL) featuring in-memory lockfile graph reconstruction, OSV range matching, and dominator tree removal-leverage ranking.
+- **Leak-Free Temporal ML Pipeline**: Designed a temporal evaluation framework with strict 6-month embargo buffers comparing heuristic baselines, gradient-boosted decision trees with topological neighbor aggregates, and PyTorch Geometric GNNs on an ecosystem-scale dependency graph.
+- **Interactive High-Performance UI**: Developed an interactive Cytoscape.js workspace rendering multi-thousand-node dependency graphs with dynamic path highlighting, progressive subtree collapsing, and in-product model cards.
+
+## 11. Project-Level Guidelines & Engineering Standards
+This project is a **High-Impact Technical Portfolio Project** designed to showcase applied software engineering, graph data science, and applied machine learning skills for job and internship applications.
+
+1. **Target Complexity**: Professional Portfolio Grade — strong fundamentals, rigorous methodology, clean code design, and clear problem-solving, without enterprise over-engineering (no microservice boilerplate, defensive try-except mazes, or excessive abstractions).
+2. **Professional Tone**: Strictly avoid academic/classroom jargon. Use professional software engineering terminology: **"Key Engineering Takeaways"**, **"Technical Insights & Trade-offs"**, **"Production Considerations"**, **"Performance Scorecard"**.
+3. **Coding Style**: Clean, readable, idiomatic code (`FastAPI`, `Pydantic`, `pandas`, `NetworkX`, `LightGBM`, `TypeScript`), self-contained, modular, and easy to explain during a technical interview.

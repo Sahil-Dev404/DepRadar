@@ -28,38 +28,23 @@ types/        api.ts (mirrors 05 section 6.2), ui.ts
 lib/          colors.ts, graphStyle.ts, format.ts
 ```
 
-## 3. Types (mirror of the API; keep in sync via the contract test)
-```ts
-export type Severity = "CRITICAL" | "HIGH" | "MODERATE" | "LOW" | "UNKNOWN";
-export type Scope = "prod" | "all";
-export type RiskBand = "High" | "Medium" | "Low";
+## 3. Data Models & API Contracts (Specification)
+The frontend consumes backend REST responses strictly matching the Pydantic schemas in `05_BACKEND_SPEC.md`:
 
-export interface Meta { osv_data_date: string; deps_dev_snapshot: string; risk_model_version: string; app_version: string }
-export interface AnalysisSummary {
-  analysis_id: string; created_at: string; expires_at: string; scope: Scope; lockfile_version: 2 | 3;
-  counts: { packages: number; direct: number; vulnerable: number; malicious: number; unscanned: number; dev_only: number; advisories: number };
-  meta: Meta;
-}
-export interface GraphNode {
-  id: string; name: string; version: string | null; depth: number; is_direct: boolean; dev_only: boolean;
-  optional: boolean; peer: boolean; vulnerable: boolean; max_severity: Severity | null; malicious: boolean;
-  unscanned: boolean; risk_score: number | null; risk_band: RiskBand | null;
-}
-export interface GraphEdge { source: string; target: string; kind: "prod" | "optional" | "peer" | "dev" }
-export interface Graph { scope: Scope; truncated: boolean; total_nodes: number; nodes: GraphNode[]; edges: GraphEdge[] }
-export interface AdvisoryRef { id: string; aliases: string[]; severity: Severity; published: string | null; summary: string | null }
-export interface VulnerableNode { node_id: string; name: string; version: string; max_severity: Severity; advisories: AdvisoryRef[]; paths: string[][]; n_direct_parents: number }
-export interface LeverageRow { direct_dep: string; name: string; version: string; removes_n: number; removes_weighted: number; node_ids: string[] }
-export interface Exposure {
-  scope: Scope; vulnerable_nodes: VulnerableNode[];
-  malicious_nodes: { node_id: string; name: string; version: string; report_ids: string[] }[];
-  fix_leverage: LeverageRow[]; unscanned: { node_id: string; name: string; reason: string }[];
-}
-export interface RiskFactor { feature: string; contribution: number; value: number | null }
-export interface RiskItem { name: string; score: number; risk_percentile: number; band: RiskBand; factors: RiskFactor[] }
-export interface RiskList { model_version: string; items: RiskItem[]; not_scored: string[] }
-// PackageDetail, ModelCard, PackageRow: copy from 05 section 6.2.
-```
+| Interface | Key Attributes | Description |
+|---|---|---|
+| `Severity` | `"CRITICAL" \| "HIGH" \| "MODERATE" \| "LOW" \| "UNKNOWN"` | Standard vulnerability severity rating. |
+| `Scope` | `"prod" \| "all"` | Scope filter toggle. |
+| `RiskBand` | `"High" \| "Medium" \| "Low"` | Percentile-derived advisory risk category. |
+| `Meta` | `osv_data_date, deps_dev_snapshot, risk_model_version, app_version` | Provenance and snapshot metadata. |
+| `AnalysisSummary` | `analysis_id, created_at, expires_at, scope, lockfile_version, counts, meta` | Overall lockfile scan summary metrics. |
+| `GraphNode` | `id, name, version, depth, is_direct, dev_only, optional, peer, vulnerable, max_severity, malicious, unscanned, risk_score, risk_band` | Resolved dependency node data for visualization. |
+| `GraphEdge` | `source, target, kind ("prod" \| "optional" \| "peer" \| "dev")` | Directed dependency relation. |
+| `Graph` | `scope, truncated, total_nodes, nodes, edges` | Full or collapsed dependency subgraph payload. |
+| `Exposure` | `scope, vulnerable_nodes, malicious_nodes, fix_leverage, unscanned` | Reachability chains, dominator removal leverage, and unscanned alerts. |
+| `RiskList` | `model_version, items (RiskItem[]), not_scored (string[])` | Precomputed forecast scores and top contributing factors. |
+| `PackageDetail` | `name, scored, risk, stats, advisories` | Detailed package profile and historical statistics. |
+| `ModelCard` | `model_version, chosen_model, data, splits, results, calibration, notes` | Formal evaluation metrics rendered directly from `metrics.json`. |
 
 ## 4. Pages
 
@@ -108,3 +93,15 @@ Loading skeleton, empty ("No known vulnerabilities in the OSV data as of ... - t
 - Component: Dropzone rejects non-JSON/oversize; LeveragePanel ordering and hover callbacks; NodeDetailPanel renders paths; ModelCard shows "not measured" for missing values.
 - Contract: type check against the exported API JSON Schema (05 section 8).
 - E2E (optional): load a sample -> graph visible -> click vulnerable node -> paths highlighted -> toggle scope.
+
+## 11. Project-Level Guidelines & Engineering Standards
+This project is a **High-Impact Technical Portfolio Project** designed to showcase applied software engineering, graph data science, and applied machine learning skills for job and internship applications.
+
+1. **Target Complexity**: Professional Portfolio Grade — strong fundamentals, rigorous methodology, clean code design, and clear problem-solving, without enterprise over-engineering.
+2. **Professional Tone (No Classroom/Viva Jargon)**:
+   - Strictly **avoid** academic/classroom terms like "viva", "oral defense", "notes for examiners", "student capstone defense", or "homework".
+   - Use professional software engineering terminology: **"Key Engineering Takeaways"**, **"Technical Insights & Trade-offs"**, **"Production Considerations"**, **"Performance Scorecard"**.
+3. **Frontend Engineering Quality**:
+   - Clean, idiomatic React 18+ with strict TypeScript.
+   - High-performance Cytoscape.js canvas rendering with progressive subtree collapsing and smooth transitions.
+   - Self-contained, modular UI architecture suitable for technical portfolio demonstrations.

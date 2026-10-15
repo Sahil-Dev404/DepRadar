@@ -3,7 +3,7 @@
 Rule of thumb: **one prompt = one module or one pipeline stage**, runnable and tested before the next. Paste the "Context line" at the start of every prompt.
 
 **Context line (paste first, every time):**
-> You are building DepRadar. Read `docs/00_README_FOR_AGENTS.md` first and follow its hard rules. Then read only the documents listed in this prompt. Do not modify files outside the listed paths. When finished, list what you did not verify.
+> You are building DepRadar, a High-Impact Technical Portfolio Project. Read `references_docs/00_README_FOR_AGENTS.md` first and adhere strictly to its project-level guidelines and hard rules. Follow professional software engineering standards, avoid classroom/viva jargon, ensure notebooks stay within 20-25 cells and 250-320 code lines with 3-5 professional figures. Do not modify files outside the listed paths. When finished, list what you did not verify.
 
 ## Build order
 
@@ -45,13 +45,13 @@ Read docs 00, 04 (sections 3, 6-8). Implement `ml/eval/{splits,metrics,stratifie
 Read docs 00, 04 (sections 6.1, 7, 8). Implement `ml/models/gnn/{sage,gat}.py` with PyTorch Geometric: two relation types (depends_on, depended_by), per-T full-batch training, early stopping on validation, 5 seeds, and the shuffled-graph control C2. Output the same `metrics.json` format as P6.
 
 ### P8 - Lockfile parser
-Read docs 00, 05 (sections 3, 8). Implement `backend/app/parsing/lockfile.py` from the reference in section 3 plus tests with fixtures (create small fixtures; also test the five files in `data/sample_lockfiles/`). Pure functions only.
+Read docs 00, 05 (sections 3, 8). Implement `backend/app/parsing/lockfile.py` based on the algorithmic specification in 05 section 3 plus tests with fixtures (create small fixtures; also test the five files in `data/sample_lockfiles/`). Pure functions only.
 
 ### P9 - Matcher
-Read docs 00, 05 (section 4). Implement `backend/app/advisories/matcher.py` from the reference and the table-driven tests listed. Pin `semantic-version` to a verified version.
+Read docs 00, 05 (section 4). Implement `backend/app/advisories/matcher.py` based on the SemVer range evaluation specification and the table-driven tests listed. Pin `semantic-version` to a verified version.
 
 ### P10 - Exposure engine
-Read docs 00, 05 (section 5). Implement `backend/app/exposure/{graph,paths,fix_leverage}.py` from the reference, including the random-graph brute-force property test and the hand-built graphs. Include `MAX_PATHS_PER_NODE` and the `n_direct_parents` computation.
+Read docs 00, 05 (section 5). Implement `backend/app/exposure/{graph,paths,fix_leverage}.py` based on the dominator-based removal leverage specification, including the random-graph brute-force property test and the hand-built graphs. Include `MAX_PATHS_PER_NODE` and the `n_direct_parents` computation.
 
 ### P11 - API and database
 Read docs 00, 02, 05. Implement schemas, routers, DB models + Alembic migration (DDL in 05 section 7), the request pipeline (05 section 2), error handling (05 section 6), and API tests (05 section 8). Use docker-compose Postgres for dev. Do not add authentication or background jobs.
@@ -72,4 +72,20 @@ Read docs 00, 06 (4.3-4.5), 04 (section 12). Implement the three pages, renderin
 Read docs 00, 02 (sections 5, 9). Write Dockerfile(s), CI workflow additions (ruff, pytest, tsc, vitest), deployment notes. Verify current free-tier limits of the chosen hosts before relying on them and list what you verified.
 
 ## Review prompt (use after any step)
-> Review the last change against `docs/00_README_FOR_AGENTS.md` rules 1-10 and the relevant spec sections. List violations, missing tests, anything unverified, and any place the code diverges from the spec. Do not fix anything yet.
+> Review the last change against `references_docs/00_README_FOR_AGENTS.md` rules 1-10 and the relevant spec sections. List violations, missing tests, anything unverified, and any place the code diverges from the spec. Do not fix anything yet.
+
+## Project-Level Guidelines & Engineering Standards
+This project is a **High-Impact Technical Portfolio Project** designed to showcase applied software engineering, graph data science, and applied machine learning skills for job and internship applications.
+
+1. **Target Complexity**: Professional Portfolio Grade — strong fundamentals, rigorous methodology, clean code design, and clear problem-solving, without enterprise over-engineering.
+2. **Professional Tone (No Classroom/Viva Jargon)**:
+   - Strictly **avoid** academic/classroom terms like "viva", "oral defense", "notes for examiners", "student capstone defense", or "homework".
+   - Use professional software engineering terminology: **"Key Engineering Takeaways"**, **"Technical Insights & Trade-offs"**, **"Production Considerations"**, **"Performance Scorecard"**.
+3. **Notebook Specifications**:
+   - **Cell Count**: 20–25 cells per notebook (approx. 12–15 code cells, 8–10 markdown cells).
+   - **Code Length**: ~250–320 lines of clean, readable, high-signal Python code.
+   - **Helpful Comments**: Clear, concise comments explaining the engineering rationale and mathematical intuition behind steps.
+   - **Visualizations**: 3–5 professional `matplotlib`/`seaborn` figures with clear labels, titles, and legends to effectively tell the technical story in a portfolio.
+4. **Coding Style**:
+   - Clean, readable, idiomatic Python (`pandas`, `numpy`, `networkx`, `scikit-learn`, `lightgbm`).
+   - Self-contained, modular, and easy to walk through during a technical interview.

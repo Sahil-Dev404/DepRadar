@@ -29,99 +29,72 @@ Location: `backend/`. Pure, testable core modules (parsing, matching, exposure) 
 9. Compute **both** scopes (`prod` and `all`) at upload and store both inside the `graph` and `exposure` JSON (keyed by scope), so the UI toggle needs no recomputation. Endpoints select by the `scope` query parameter (default `prod`).
 10. Bundled samples: copy the five files from `data/sample_lockfiles/` into `backend/app/samples/` (small enough to ship) and serve them through `/api/samples`; `POST /api/analyses/sample/{id}` runs the same pipeline on them.
 
-## 3. Lockfile parsing (v2/v3) - reference (tested)
+## 3. Lockfile parsing (v2/v3) - Algorithmic Specification
 
-```python
-def pkg_name_from_path(path, entry):
-    return entry.get("name") or path.rsplit("node_modules/", 1)[-1]
+### 3.1 Node Resolution Algorithm
+Resolving a dependency `dep` referenced by a package located at path `P` within the lockfile `packages` map:
+1. **Candidate Path Check**: Form candidate string `<P>/node_modules/<dep>` if `P` is non-empty, else `node_modules/<dep>`.
+2. **Registry Lookup**: If candidate exists in the `packages` map, return candidate as the resolved node ID.
+3. **Ascend Hierarchy**: If candidate does not exist and `P` is not the root, find the last `/node_modules/` in `P`, truncate `P` to that prefix, and repeat step 1.
+4. **Unresolved**: If `P` is empty and candidate is not found, return `None` (representing an optional or uninstalled peer dependency).
 
-def resolve(path, dep, packages):
-    """Node resolution: <path>/node_modules/<dep>, then walk up parent node_modules, ..., root."""
-    base = path
-    while True:
-        cand = f"{base}/node_modules/{dep}" if base else f"node_modules/{dep}"
-        if cand in packages: return cand
-        if not base: return None
-        i = base.rfind("/node_modules/")
-        base = base[:i] if i != -1 else ""
-```
-Rules:
-- Node id = the `packages` key (e.g. `node_modules/a/node_modules/b`); the root entry `""` has id `"root"`.
-- Name: `entry["name"]` if present (aliases), else the path segment after the last `node_modules/` (scoped names like `@s/x` are preserved by `rsplit`).
-- Edge kinds per source entry: `dependencies` -> `prod`; `optionalDependencies` -> `optional`; `peerDependencies` -> `peer`; `devDependencies` -> `dev` **only for the root and workspace roots**. If `resolve(...)` returns nothing (optional/uninstalled peer) there is **no edge**.
-- Entries with `link: true` are workspace symlinks: they have no deps of their own; an edge into a link follows `resolved` to the target package entry.
-- Flags from the lockfile: `dev`, `optional`, `peer` (`devOptional` counts as dev for scope purposes).
-- Ignore the legacy v2 `dependencies` tree. Do not read `integrity`/`resolved` beyond deciding `scannable`.
+### 3.2 Package Identification & Edge Rules
+- **Node Identifier**: The exact `packages` dictionary key (e.g., `node_modules/a/node_modules/b`); the root entry `""` is mapped to ID `"root"`.
+- **Package Name**: Extracted from `entry["name"]` if explicitly present (aliased packages), otherwise parsed from the path segment following the final `node_modules/` (preserving scoped names such as `@scope/pkg`).
+- **Edge Kinds**:
+  - `dependencies` -> `prod` edge.
+  - `optionalDependencies` -> `optional` edge.
+  - `peerDependencies` -> `peer` edge.
+  - `devDependencies` -> `dev` edge (evaluated **only for the root and workspace root entries**).
+- **Workspace Symlinks**: Entries with `link: true` have no dependencies of their own; incoming edges follow the `resolved` attribute to link directly to the target package entry.
+- **Node Flags**: Recorded directly from lockfile attributes: `dev`, `optional`, `peer` (`devOptional` treated as dev).
+- **Version Scannability**: A node is marked `scannable` only if its version string adheres strictly to SemVer specification and its resolved source is a package registry. Non-semver or git/URL sources are marked `unscanned`.
 
-### 3.3 Scope
-- `scope = "prod"` (default): drop `dev` edges; nodes unreachable from root through the remaining edges are **dev-only** (flagged `dev_only: true`, excluded from exposure/leverage).
-- `scope = "all"`: include dev edges.
+### 3.3 Scope Handling
+- `scope = "prod"` (Default): Prune all `dev` edges. Nodes that become unreachable from `root` in the pruned graph are marked `dev_only: true` and excluded from vulnerability exposure and removal leverage.
+- `scope = "all"`: Retain `dev` edges; all reachable nodes participate in graph evaluation.
 
-Tests (fixtures in `backend/tests/fixtures/`): nested duplicate (`a/node_modules/b` vs hoisted `b`), scoped package, dev/optional/peer flags, workspace link, v1 rejection, aliased package name, malformed JSON; and all five files in `data/sample_lockfiles/` parse without error.
+## 4. Advisory matching - Algorithmic Specification
 
-## 4. Advisory matching - reference (tested)
+### 4.1 SemVer Range Evaluation Logic
+OSV npm advisories specify vulnerability windows via `ranges` (`SEMVER` or `ECOSYSTEM`) and explicit `versions` lists:
+1. **Explicit Version Check**: If package `version` appears in `advisory.versions`, the package is immediately marked **affected**.
+2. **Range Interval Extraction**:
+   - Extract event tuples `(version_point, event_kind)` for kinds: `introduced`, `fixed`, `last_affected`.
+   - Map version point `"0"` to `0.0.0`.
+3. **Event Ordering**: Sort extracted events by version point in ascending order. At identical version points, order open boundaries (`introduced`) before close boundaries (`fixed` / `last_affected`).
+4. **State Machine Traversal**:
+   - Initialize `affected = False`.
+   - Traverse sorted events:
+     - If `event_kind == "introduced"` and `pkg_version >= version_point`: set `affected = True`.
+     - If `event_kind == "fixed"` and `pkg_version >= version_point`: set `affected = False`.
+     - If `event_kind == "last_affected"` and `pkg_version > version_point`: set `affected = False`.
+5. **Multi-Range Combination**: Multiple ranges within an advisory are combined via logical `OR`.
+6. **Non-SemVer Handling**: Versions that fail SemVer parsing are not evaluated against ranges and are reported as `unscanned`.
 
-OSV semantics for npm (`ranges[].type` of `SEMVER` or `ECOSYSTEM`): within a range, events sorted by version (`"0"` = lowest). A version is **affected** if it falls in an interval that opens at `introduced` and closes at the next `fixed` (exclusive) or `last_affected` (inclusive); an `introduced` with no close is open-ended. A version listed in `affected[].versions` is also affected. Ranges are OR-ed. Unparseable versions are **not matched** (the caller reports the package as `unscanned`).
+### 4.2 Severity & Weighting
+- Map OSV `database_specific.severity` to standard enum: `CRITICAL`, `HIGH`, `MODERATE`, `LOW`, or `UNKNOWN`.
+- Configurable severity weights (default: CRITICAL=4, HIGH=3, MODERATE=2, LOW=1, UNKNOWN=1).
 
-```python
-from semantic_version import Version   # pin an exact version; npm versions are strict semver
+## 5. Exposure engine - Algorithmic Specification
 
-def is_affected(version, ranges, versions):
-    try: ver = Version(version)
-    except ValueError: return False
-    if version in (versions or []): return True
-    for rng in ranges or []:
-        if rng.get("type") not in ("SEMVER", "ECOSYSTEM"): continue
-        events = []
-        for e in rng.get("events", []):
-            for kind in ("introduced", "fixed", "last_affected"):
-                if kind in e:
-                    events.append((Version("0.0.0") if e[kind] == "0" else Version(e[kind]), kind))
-        order = {"introduced": 0, "fixed": 1, "last_affected": 1}
-        events.sort(key=lambda t: (t[0], order[t[1]]))     # open before close at equal versions
-        affected = False
-        for point, kind in events:
-            if kind == "introduced" and ver >= point: affected = True
-            elif kind == "fixed" and ver >= point: affected = False
-            elif kind == "last_affected" and ver > point: affected = False
-        if affected: return True
-    return False
-```
-Required table-driven tests (all passed in the reference): `[intro 0, fixed 1.2.3]` (1.2.2 yes, 1.2.3 no); two intervals (1.4.9 yes, 1.5.0 no, 2.0.5 yes, 2.1.0 no, 3.0.0 no); `last_affected 1.9.0` (1.9.0 yes, 1.9.1 no); open-ended; explicit `versions` list; prerelease `1.0.0-beta.1` is below `1.0.0` (affected when fixed is 1.0.0); unsorted events; non-semver version -> no match. Library behaviour for edge cases must be re-checked if the semver library is changed.
+Graph structure: Directed Graph $G = (V, E)$, with edges oriented `parent -> child` (dependency relation) and root identifier `"root"`.
 
-Severity: map from OSV `database_specific.severity` (`CRITICAL|HIGH|MODERATE|LOW`); missing -> `UNKNOWN`. Weights from config (default 4/3/2/1, unknown 1).
+### 5.1 Exposure Paths
+For each vulnerable or malicious node $v$ reachable from `"root"`:
+1. Enumerate up to `MAX_PATHS_PER_NODE` (default 5) shortest simple paths from `"root"` to $v$ (using shortest-simple-paths traversal, bounded to prevent combinatorial explosion).
+2. Compute `n_direct_parents`: the count of distinct direct dependencies of `"root"` through which node $v$ is reachable.
 
-## 5. Exposure engine
-
-Graph: `DiGraph`, edge `parent -> child` (resolved). Root id `"root"`.
-
-### 5.1 Exposure paths
-For every vulnerable (or malicious) node reachable from root: up to `MAX_PATHS_PER_NODE` (default 5) shortest paths (`networkx.shortest_simple_paths`, stop after K), plus `n_direct_parents` = number of distinct direct dependencies of root from which the node is reachable. Never enumerate all paths (can explode).
-
-### 5.2 Removal leverage - reference (tested: equals brute-force node removal on 3,057 checks over 400 random graphs with cycles)
-
-```python
-import networkx as nx
-ROOT = "root"
-def dominated_sets(G, root=ROOT):
-    idom = nx.immediate_dominators(G, root)          # reachable nodes only; idom[root] == root
-    tree = nx.DiGraph(); tree.add_nodes_from(idom)
-    for n, p in idom.items():
-        if n != root: tree.add_edge(p, n)
-    return {n: set(nx.descendants(tree, n)) | {n} for n in tree.nodes if n != root}
-
-def fix_leverage(G, vulnerable, weights, root=ROOT):
-    """vulnerable: node_id -> severity; weights: severity -> int"""
-    dom, rows = dominated_sets(G, root), []
-    for d in G.successors(root):
-        removed = [v for v in dom.get(d, set()) if v in vulnerable]
-        rows.append({"direct_dep": d, "removes_n": len(removed),
-                     "removes_weighted": sum(weights.get(vulnerable[v], 1) for v in removed),
-                     "node_ids": sorted(removed)})
-    return sorted(rows, key=lambda r: (-r["removes_weighted"], -r["removes_n"], r["direct_dep"]))
-```
-Meaning: `d` *dominates* `v` if every root-to-`v` path passes through `d`; dropping `d` removes `v`. This is an **upper bound on benefit of changing `d`** (an upgrade of `d` may or may not remove them). UI wording follows 01 section 7.
-Required tests: the property test (random digraphs with cycles; compare with brute-force "delete node, recompute reachability"), a hand-built graph where a vulnerable node is reachable via two direct dependencies (leverage 0 for each), and a node reachable through exactly one.
+### 5.2 Dominator-Based Removal Leverage
+Removal leverage quantifies how much systemic vulnerability exposure dropping or replacing a direct dependency would eliminate:
+1. **Immediate Dominators**: Compute immediate dominators tree with root `"root"` using the Lengauer-Tarjan dominator tree algorithm. Node $d$ dominates node $v$ if every path from `"root"` to $v$ must pass through $d$.
+2. **Dominated Subtrees**: For each direct dependency $d$ (where $(root, d) \in E$), the dominated set $Dom(d)$ contains all descendants of $d$ in the dominator tree plus $d$ itself.
+3. **Leverage Calculation**:
+   - Intersect $Dom(d)$ with the set of reachable vulnerable nodes $V_{vuln}$.
+   - Compute `removes_n`: count of vulnerable nodes in $Dom(d) \cap V_{vuln}$.
+   - Compute `removes_weighted`: sum of severity weights for all vulnerable nodes in $Dom(d) \cap V_{vuln}$.
+4. **Ranking**: Rank direct dependencies descending by `removes_weighted`, then `removes_n`, then dependency name.
+5. **Interpretation**: Leverage represents an **upper bound on exposure reduction** if direct dependency $d$ were eliminated. UI wording must strictly reflect this upper bound.
 
 ## 6. API contract (all JSON; `Content-Type: application/json` except upload)
 
@@ -192,40 +165,22 @@ ModelCard { "model_version": "...", "chosen_model": "m3", "data": {...}, "splits
 ```
 Rules: ids are the lockfile `packages` keys (strings); numbers are never fabricated; absent risk -> `null` and the package name appears in `not_scored`.
 
-## 7. Database (PostgreSQL; Alembic migrations)
+## 7. Database Specification (PostgreSQL & Alembic)
 
-```sql
-CREATE TABLE advisories (
-  osv_id TEXT NOT NULL, package TEXT NOT NULL, kind TEXT NOT NULL CHECK (kind IN ('vulnerability','malware')),
-  published TIMESTAMPTZ, modified TIMESTAMPTZ, withdrawn TIMESTAMPTZ,
-  severity TEXT, aliases JSONB, ranges JSONB, versions JSONB,
-  PRIMARY KEY (osv_id, package));
-CREATE INDEX advisories_package_idx ON advisories (package);
+### 7.1 Schema Definitions
+The database stores point-in-time reference data and analysis results:
 
-CREATE TABLE risk_scores (
-  package TEXT NOT NULL, model_version TEXT NOT NULL, score REAL NOT NULL, risk_percentile REAL NOT NULL,
-  band TEXT NOT NULL, factors JSONB, PRIMARY KEY (package, model_version));
+| Table | Primary Key | Columns & Constraints | Description |
+|---|---|---|---|
+| `advisories` | `(osv_id, package)` | `kind TEXT CHECK (kind IN ('vulnerability','malware'))`, `published TIMESTAMPTZ`, `modified TIMESTAMPTZ`, `withdrawn TIMESTAMPTZ`, `severity TEXT`, `aliases JSONB`, `ranges JSONB`, `versions JSONB` | Ingested OSV advisories. Indexed on `package`. |
+| `risk_scores` | `(package, model_version)` | `score REAL NOT NULL`, `risk_percentile REAL NOT NULL`, `band TEXT NOT NULL`, `factors JSONB` | Precomputed package risk scores and approximate drivers. |
+| `package_stats` | `package` | `dependents INT`, `n_versions INT`, `first_published TIMESTAMPTZ`, `last_published TIMESTAMPTZ`, `n_prior_advisories INT`, `stars INT`, `forks INT`, `open_issues INT` | Package popularity and release cadence summary. |
+| `package_edges` | `(src, dst)` | `src TEXT NOT NULL`, `dst TEXT NOT NULL` | Ecosystem dependency edges as of latest snapshot. Indexed on `dst`. |
+| `model_runs` | `id SERIAL` | `model_version TEXT UNIQUE`, `chosen_model TEXT`, `trained_at TIMESTAMPTZ`, `git_sha TEXT`, `config JSONB`, `splits JSONB`, `metrics JSONB`, `is_active BOOLEAN` | Metadata and evaluation metrics for model card serving. |
+| `meta` | `key` | `value TEXT NOT NULL` | System provenance metadata (`osv_data_date`, `deps_dev_snapshot`, etc.). |
+| `analyses` | `id UUID` | `created_at TIMESTAMPTZ`, `expires_at TIMESTAMPTZ NOT NULL`, `lockfile_sha256 TEXT`, `lockfile_version INT`, `scope_default TEXT`, `summary JSONB`, `graph JSONB`, `exposure JSONB` | Transient analysis results (**never stores lockfile body**). Indexed on `expires_at`. |
 
-CREATE TABLE package_stats (
-  package TEXT PRIMARY KEY, dependents INT, n_versions INT, first_published TIMESTAMPTZ, last_published TIMESTAMPTZ,
-  n_prior_advisories INT, stars INT, forks INT, open_issues INT);
-
-CREATE TABLE package_edges (src TEXT NOT NULL, dst TEXT NOT NULL, PRIMARY KEY (src, dst));   -- ecosystem graph at NOW
-CREATE INDEX package_edges_dst_idx ON package_edges (dst);
-
-CREATE TABLE model_runs (
-  id SERIAL PRIMARY KEY, model_version TEXT UNIQUE NOT NULL, chosen_model TEXT, trained_at TIMESTAMPTZ,
-  git_sha TEXT, config JSONB, splits JSONB, metrics JSONB, is_active BOOLEAN DEFAULT FALSE);
-
-CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);   -- osv_data_date, deps_dev_snapshot, ...
-
-CREATE TABLE analyses (
-  id UUID PRIMARY KEY, created_at TIMESTAMPTZ DEFAULT now(), expires_at TIMESTAMPTZ NOT NULL,
-  lockfile_sha256 TEXT, lockfile_version INT, scope_default TEXT,
-  summary JSONB NOT NULL, graph JSONB NOT NULL, exposure JSONB NOT NULL);   -- no lockfile body
-CREATE INDEX analyses_expires_idx ON analyses (expires_at);
-```
-Storage note: OSV npm is ~233k rows, 95% malware. If free-tier storage is tight, store malware rows compactly (osv_id, package, published, ranges). Expired analyses are deleted lazily on write or by a periodic task.
+Storage note: OSV npm is ~233k rows, 95% malware. If storage is constrained, malware rows are stored compactly (`osv_id`, `package`, `published`, `ranges`). Expired analyses are pruned lazily on write or via periodic task.
 
 ## 8. Testing requirements
 - Unit (no DB): parsing, matching (table-driven), exposure (property test + hand graphs), scope handling, severity mapping.
@@ -236,3 +191,14 @@ Storage note: OSV npm is ~233k rows, 95% malware. If free-tier storage is tight,
 
 ## 9. Dependencies (pin exact, verified versions)
 fastapi, uvicorn, pydantic (v2), pydantic-settings, SQLAlchemy 2, alembic, psycopg (v3, binary), networkx, semantic-version, python-multipart, pytest, httpx, ruff. Loading scripts (offline only): pandas, pyarrow.
+
+## 10. Project-Level Guidelines & Engineering Standards
+This project is a **High-Impact Technical Portfolio Project** designed to showcase applied software engineering, graph data science, and applied machine learning skills for job and internship applications.
+
+1. **Target Complexity**: Professional Portfolio Grade — strong fundamentals, rigorous methodology, clean code design, and clear problem-solving, without enterprise over-engineering.
+2. **Professional Tone (No Classroom/Viva Jargon)**:
+   - Strictly **avoid** academic/classroom terms like "viva", "oral defense", "notes for examiners", "student capstone defense", or "homework".
+   - Use professional software engineering terminology: **"Key Engineering Takeaways"**, **"Technical Insights & Trade-offs"**, **"Production Considerations"**, **"Performance Scorecard"**.
+3. **Coding Style**:
+   - Clean, readable, idiomatic Python (`FastAPI`, `Pydantic`, `SQLAlchemy`, `NetworkX`, `semantic-version`).
+   - Self-contained, modular, pure algorithmic cores, and easy to walk through during a technical interview.

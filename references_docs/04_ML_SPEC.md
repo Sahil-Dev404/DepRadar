@@ -130,3 +130,19 @@ Fixed seeds (Python, NumPy, PyTorch); log library versions into `metrics.json`; 
 
 ## 12. Model card (`docs/model_card.md` and `GET /api/model/card`)
 Must contain: data sources and dates, universe definition and its selection-bias note, label definition, features, splits with embargo, results tables (with base rates) for all models and controls, calibration plots/numbers for Test-A and Test-B, stratified results, the surge discussion, limitations (03 section 5.2), intended use, and failure modes. Numbers are copied from `metrics.json`, never typed by hand.
+
+## 13. Project-Level Guidelines & Engineering Standards
+This project is a **High-Impact Technical Portfolio Project** designed to showcase applied software engineering, graph data science, and applied machine learning skills for job and internship applications.
+
+1. **Target Complexity**: Professional Portfolio Grade — strong fundamentals, rigorous methodology, clean code design, and clear problem-solving, without enterprise over-engineering.
+2. **Professional Tone (No Classroom/Viva Jargon)**:
+   - Strictly **avoid** academic/classroom terms like "viva", "oral defense", "notes for examiners", "student capstone defense", or "homework".
+   - Use professional software engineering terminology: **"Key Engineering Takeaways"**, **"Technical Insights & Trade-offs"**, **"Production Considerations"**, **"Performance Scorecard"**.
+3. **Notebook Specifications**:
+   - **Cell Count**: 20–25 cells per notebook (approx. 12–15 code cells, 8–10 markdown cells).
+   - **Code Length**: ~250–320 lines of clean, readable, high-signal Python code.
+   - **Helpful Comments**: Clear, concise comments explaining the engineering rationale and mathematical intuition behind steps.
+   - **Visualizations**: 3–5 professional `matplotlib`/`seaborn` figures with clear labels, titles, and legends to effectively tell the technical story in a portfolio.
+4. **Coding Style**:
+   - Clean, readable, idiomatic Python (`pandas`, `numpy`, `networkx`, `scikit-learn`, `lightgbm`, `torch_geometric`).
+   - Self-contained, modular, and easy to walk through during a technical interview.

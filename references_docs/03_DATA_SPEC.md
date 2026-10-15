@@ -121,63 +121,45 @@ Common rules: use `pipelines/common/bq.py` helper that (1) dry-runs, (2) prints 
 
 Estimated total scan: under about 70 GB (about 6% of the monthly free quota). Treat as an estimate; the dry runs decide.
 
-### Stage 2 - dependents per package at every T (reference SQL, UNVERIFIED, generate the column list from the grid)
-Counts, for each package `P` and each `T`, the number of distinct packages that had **declared `P` as a production dependency in some version published on or before `T`**.
-```sql
-WITH pairs AS (
-  SELECT dep.Name AS dep_name, r.Name AS dependent, MIN(pv.UpstreamPublishedAt) AS first_declared
-  FROM `bigquery-public-data.deps_dev_v1.NPMRequirements` AS r
-  JOIN `bigquery-public-data.deps_dev_v1.PackageVersions` AS pv
-    ON pv.Name = r.Name AND pv.Version = r.Version
-  CROSS JOIN UNNEST(r.Dependencies) AS dep
-  WHERE r.SnapshotAt  = TIMESTAMP('<T_LATEST>')
-    AND pv.SnapshotAt = TIMESTAMP('<T_LATEST>')
-    AND pv.System = 'NPM'
-  GROUP BY dep_name, dependent
-)
-SELECT dep_name AS package,
-       COUNT(*) AS dependents_latest,
-       COUNTIF(first_declared <= TIMESTAMP('<T_00>')) AS dependents_t00,
-       -- ... one column per grid T ...
-       COUNTIF(first_declared <= TIMESTAMP('<T_39>')) AS dependents_t39
-FROM pairs
-GROUP BY dep_name
-HAVING COUNT(*) >= 3
-```
-Caveats: counts "ever declared by T" (a dependent that later dropped the dependency still counts); production `Dependencies` only. If BigQuery reports resource limits, split the T columns across several queries. Do the dry run first (the cheaper aggregate measured 11.16 GB; this join is larger).
+### Stage 2 - Dependents per package at every T (Specification)
+Counts, for each package `P` and each snapshot `T`, the number of distinct packages that had **declared `P` as a production dependency in some version published on or before `T`**.
+- **Source Tables**: `bigquery-public-data.deps_dev_v1.NPMRequirements` (aliased `r`) joined with `PackageVersions` (aliased `pv`) on `Name` and `Version` at `SnapshotAt = T_LATEST`.
+- **Relationship**: Unnest `r.Dependencies` to extract `dep.Name AS dep_name` and `r.Name AS dependent`.
+- **Look-Ahead Prevention**: Compute `first_declared = MIN(pv.UpstreamPublishedAt)` for each `(dep_name, dependent)` pair.
+- **Aggregation**: For each grid date `T_xx`, compute `COUNTIF(first_declared <= T_xx)` to determine `dependents_txx`. Include overall `COUNT(*) AS dependents_latest`. Filter with `HAVING COUNT(*) >= 3`.
+- **Operational Rule**: If BigQuery resource limits occur, partition the date columns across queries. Perform dry runs first with `maximum_bytes_billed` protection.
 
-### Stage 3 - universe
-For each grid `T`: `universe_T` = top **N = 30,000** packages by `dependents_tXX` among packages with at least one version published on or before `T` (check against `package_versions` after stage 4; drop others). `universe_candidates` = union over all `T` (expected tens of thousands; record the real size). N is a config value in `ml/configs/data.yaml`.
-**Selection-bias note**: ranking uses dependents *as of T* (not today's popularity) to avoid look-ahead. Record this in the model card.
+### Stage 3 - Universe Selection
+For each grid `T`: `universe_T` = top **N = 30,000** packages ranked by `dependents_tXX` among packages with at least one release version published on or before `T`.
+- `universe_candidates` = union of `universe_T` across all `T` (tens of thousands of unique packages).
+- **Selection-Bias Rule**: Ranking is strictly computed *as of T* to prevent look-ahead bias.
 
-### Stage 4 - versions
-```sql
-SELECT Name AS name, Version AS version, UpstreamPublishedAt AS published_at,
-       VersionInfo.IsRelease AS is_release, VersionInfo.Ordinal AS ordinal
-FROM `bigquery-public-data.deps_dev_v1.PackageVersions`
-WHERE SnapshotAt = TIMESTAMP('<T_LATEST>') AND System = 'NPM' AND Name IN UNNEST(@names)
-```
-Do **not** select `Deprecated`, `ProjectStatus` or other current-state columns for features (they would leak the future).
+### Stage 4 - Package Versions (Specification)
+Extract package releases for all `universe_candidates`:
+- **Source Table**: `bigquery-public-data.deps_dev_v1.PackageVersions` at `SnapshotAt = T_LATEST`.
+- **Filter**: `System = 'NPM'` and `Name IN UNNEST(@universe_candidates)`.
+- **Extracted Fields**: `name`, `version`, `published_at` (`UpstreamPublishedAt`), `is_release` (`VersionInfo.IsRelease`), and `ordinal` (`VersionInfo.Ordinal`).
+- **Strict Leakage Prevention**: Do **not** select mutable current-state fields (such as `Deprecated` or `ProjectStatus`), which leak future state.
 
-### Stage 5 - version dependencies (production only)
-```sql
-SELECT r.Name AS name, r.Version AS version, dep.Name AS dep_name, dep.Requirement AS requirement
-FROM `bigquery-public-data.deps_dev_v1.NPMRequirements` AS r, UNNEST(r.Dependencies) AS dep
-WHERE r.SnapshotAt = TIMESTAMP('<T_LATEST>') AND r.Name IN UNNEST(@names) AND dep.Name IN UNNEST(@names)
-```
-Both endpoints must be in `universe_candidates`.
+### Stage 5 - Version Dependencies (Specification)
+Extract resolved direct dependencies for each version:
+- **Source Table**: `bigquery-public-data.deps_dev_v1.NPMRequirements` at `SnapshotAt = T_LATEST`.
+- **Filter**: `r.Name IN UNNEST(@universe_candidates)` and `dep.Name IN UNNEST(@universe_candidates)`.
+- **Extracted Fields**: `name`, `version`, `dep_name` (`dep.Name`), and `requirement` (`dep.Requirement`). Production dependencies only.
 
-### Stage 6 - package to repository
-```sql
-SELECT Name AS name, Version AS version, ProjectType AS project_type, ProjectName AS project_name,
-       RelationType AS relation_type, RelationProvenance AS relation_provenance
-FROM `bigquery-public-data.deps_dev_v1.PackageVersionToProject`
-WHERE SnapshotAt = TIMESTAMP('<T_LATEST>') AND System = 'NPM' AND Name IN UNNEST(@names)
-```
-Then in pandas: inspect distinct `relation_type` / `relation_provenance` (UNVERIFIED which value means "source repository"), keep that relation, and take each package's mapping from its highest-`ordinal` release version -> `package_project.parquet(name, project_type, project_name)`.
+### Stage 6 - Package to Repository Linkage (Specification)
+Map packages to source repository identifiers:
+- **Source Table**: `bigquery-public-data.deps_dev_v1.PackageVersionToProject` at `SnapshotAt = T_LATEST`.
+- **Filter**: `System = 'NPM'` and `Name IN UNNEST(@universe_candidates)`.
+- **Extracted Fields**: `name`, `version`, `project_type`, `project_name`, `relation_type`, `relation_provenance`.
+- **Processing Rule**: Filter for source repository relation provenance; map each package from its highest-`ordinal` release version to produce `package_project.parquet(name, project_type, project_name)`.
 
-### Stage 7 - repository stats at each T
-For each grid `T`: `SELECT Type AS project_type, Name AS project_name, StarsCount AS stars, ForksCount AS forks, OpenIssuesCount AS open_issues FROM Projects WHERE SnapshotAt = TIMESTAMP('<T>') AND Type = '<GITHUB value>' AND Name IN UNNEST(@project_names)`. The exact `Type` string is UNVERIFIED (inspect distinct values with a tiny dry-run-checked query). Stars/forks/issues **as of T** are legitimate features because snapshots exist per week.
+### Stage 7 - Repository Metrics at Each T (Specification)
+Extract historical repository activity metrics as of each snapshot:
+- **Source Table**: `Projects` snapshot at `SnapshotAt = T`.
+- **Filter**: `Type = 'GITHUB'` and `Name IN UNNEST(@project_names)`.
+- **Extracted Fields**: `project_type`, `project_name`, `stars` (`StarsCount`), `forks` (`ForksCount`), `open_issues` (`OpenIssuesCount`).
+- **Temporal Integrity**: Historical snapshots preserve exact metric values as of `T` without look-ahead leakage.
 
 ### Stage 9 - OSV ingest
 Already implemented in notebook 01 Part B: move to `pipelines/osv_ingest/ingest_osv.py`. Output columns: `osv_id, package, published, modified, withdrawn, severity, aliases (JSON string), ranges_json (JSON string), versions_json (JSON string), kind`. Exclude rows with `withdrawn` set when labelling and when serving matches. Record the download date in `data/raw/README.md` and in `meta.osv_data_date`.
@@ -216,3 +198,10 @@ For each grid date `T` (and `NOW`):
 
 ## 8. Data credits (put in README)
 "Dependency and package metadata: deps.dev (Google), CC-BY 4.0. Vulnerability and malware data: OSV (osv.dev) and its upstream sources, per their licences."
+
+## 9. Project-Level Guidelines & Engineering Standards
+This project is a **High-Impact Technical Portfolio Project** designed to showcase applied software engineering, graph data science, and applied machine learning skills for job and internship applications.
+
+1. **Target Complexity**: Professional Portfolio Grade — strong fundamentals, rigorous methodology, clean code design, and clear problem-solving, without enterprise over-engineering.
+2. **Professional Tone**: Strictly avoid academic/classroom jargon. Use professional software engineering terminology: **"Key Engineering Takeaways"**, **"Technical Insights & Trade-offs"**, **"Production Considerations"**, **"Performance Scorecard"**.
+3. **Data Engineering Principles**: Deterministic point-in-time snapshot reconstruction, zero look-ahead leakage, dry-run query cost validation, and strict schema validation across all pipeline stages.

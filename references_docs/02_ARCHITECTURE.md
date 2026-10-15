@@ -112,3 +112,10 @@ Versions: pin exact releases that exist and are at least two weeks old; verify a
 3. Risk scores are precomputed; the API is stateless w.r.t. models.
 4. Malware reports are a separate product finding, not model labels.
 5. Removal leverage uses dominator analysis (verified equal to brute-force node removal on random graphs with cycles).
+
+## 12. Project-Level Guidelines & Engineering Standards
+This project is a **High-Impact Technical Portfolio Project** designed to showcase applied software engineering, graph data science, and applied machine learning skills for job and internship applications.
+
+1. **Target Complexity**: Professional Portfolio Grade — strong fundamentals, rigorous methodology, clean code design, and clear problem-solving, without enterprise over-engineering.
+2. **Professional Tone**: Strictly avoid academic/classroom jargon. Use professional software engineering terminology: **"Key Engineering Takeaways"**, **"Technical Insights & Trade-offs"**, **"Production Considerations"**, **"Performance Scorecard"**.
+3. **Architecture Principles**: Stateless request path, pure deterministic algorithms in core modules, precomputed ML inference stored in PostgreSQL, and responsive, interactive UI rendering.
